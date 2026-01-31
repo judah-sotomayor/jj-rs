@@ -76,15 +76,18 @@ pub fn scan_shell_configs() -> eyre::Result<Vec<ShellIssue>> {
 
     // 3. User Files
     let user_configs = [
+        ".bash_login",
+        ".bash_logout",
+        ".bash_profile",
         ".bashrc",
         ".profile",
-        ".bash_profile",
-        ".zshrc",
-        ".zprofile",
-        ".bash_logout",
-        ".zlogout",
         ".xinitrc",
         ".xsession",
+        ".zlogin",
+        ".zlogout",
+        ".zprofile",
+        ".zshrc",
+        ".zshenv",
     ];
 
     for user in users {
