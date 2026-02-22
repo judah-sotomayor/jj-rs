@@ -1,7 +1,8 @@
-use std::{net::Ipv4Addr, path::PathBuf};
-
+use crate::utils::clap::Host;
 use chrono::{DateTime, NaiveDateTime, Utc};
 use sha2::{Digest, Sha256};
+use std::net::Ipv4Addr;
+use std::path::PathBuf;
 
 use super::*;
 
@@ -31,7 +32,7 @@ impl std::str::FromStr for CliHeader {
 pub struct HttpTroubleshooter {
     /// The address of the web server in question
     #[arg(long, short = 'H', default_value = "127.0.0.1")]
-    pub host: Ipv4Addr,
+    pub host: Host,
 
     /// The port of the HTTP server
     #[arg(long, short, default_value_t = 80)]
@@ -105,7 +106,7 @@ pub struct HttpTroubleshooter {
 impl Default for HttpTroubleshooter {
     fn default() -> Self {
         HttpTroubleshooter {
-            host: Ipv4Addr::from(0x7F_00_00_01),
+            host: Host::from("127.0.0.1".to_string()),
             port: 80,
             reference_file: None,
             reference_difference_count: None,
@@ -142,12 +143,12 @@ impl Troubleshooter for HttpTroubleshooter {
                 self.host.is_loopback() || self.local,
                 "Cannot check openrc service on remote host",
             ),
-            tcp_connect_check(
-                self.host,
+            tcp_connect_check_dns(
+                self.host.clone(),
                 self.port,
                 self.disable_download_shell,
                 self.sneaky_ip,
-            ),
+            )?,
             binary_ports_check(
                 // None for Linux, because do we also want to check things like gitea and splunk?
                 // None for Windows because Windows binds using its kernel, with PID 4... it doesn't show up normally

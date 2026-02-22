@@ -1,6 +1,7 @@
-use std::{net::Ipv4Addr};
-use chrono::Utc;
 use super::*;
+use crate::utils::clap::Host;
+use chrono::Utc;
+use std::net::Ipv4Addr;
 
 /// Troubleshoot a FTP server connection
 #[derive(clap::Parser, serde::Serialize, serde::Deserialize, Debug, Clone)]
@@ -8,7 +9,7 @@ use super::*;
 pub struct FtpTroubleshooter {
     /// The host to connect to and attempt signing in
     #[arg(long, short = 'H', default_value = "127.0.0.1")]
-    pub host: Ipv4Addr,
+    pub host: Host,
 
     /// The port of the FTP server
     #[arg(long, short, default_value_t = 21)]
@@ -58,7 +59,7 @@ pub struct FtpTroubleshooter {
 impl Default for FtpTroubleshooter {
     fn default() -> Self {
         FtpTroubleshooter {
-            host: Ipv4Addr::from(0x7F_00_00_01),
+            host: Host::from("127.0.0.1".to_string()),
             port: 21,
             user: "Anonymous".to_string(),
             password: CheckValue::stdin(),
@@ -94,7 +95,6 @@ impl Troubleshooter for FtpTroubleshooter {
                 self.host.is_loopback() || self.local,
                 "Cannot check service on remote host",
             ),
-
             // Binary / port check
             #[cfg(unix)]
             binary_ports_check(
@@ -103,15 +103,13 @@ impl Troubleshooter for FtpTroubleshooter {
                 CheckIpProtocol::Tcp,
                 self.host.is_loopback() || self.local,
             ),
-
             // TCP connection check
-            tcp_connect_check(
-                self.host,
+            tcp_connect_check_dns(
+                self.host.clone(),
                 self.port,
                 self.disable_download_shell,
                 self.sneaky_ip,
-            ),
-
+            )?,
             // Optional Unix tcpdump
             #[cfg(unix)]
             immediate_tcpdump_check(
@@ -120,10 +118,8 @@ impl Troubleshooter for FtpTroubleshooter {
                 b"openssh".to_vec(),
                 self.host.is_loopback() || self.local,
             ),
-
             // Remote login
             check_fn("Try remote login", |tr| self.try_remote_login(tr)),
-
             // PAM check for Unix
             #[cfg(unix)]
             pam_check(
@@ -132,7 +128,6 @@ impl Troubleshooter for FtpTroubleshooter {
                 self.password.clone(),
                 self.host.is_loopback() || self.local,
             ),
-
             // Passive tcpdump for Unix
             #[cfg(unix)]
             passive_tcpdump_check(
@@ -147,7 +142,7 @@ impl Troubleshooter for FtpTroubleshooter {
 
 impl FtpTroubleshooter {
     fn try_remote_login(&self, tr: &mut dyn TroubleshooterRunner) -> eyre::Result<CheckResult> {
-        let host = self.host;
+        let host = self.host.clone();
         let port = self.port;
         let user = self.user.clone();
         let pass = if self.user.eq_ignore_ascii_case("anonymous") {
@@ -168,7 +163,7 @@ impl FtpTroubleshooter {
                     .build()
                     .map_err(|e| format!("{e}"))
                     .and_then(|rt| {
-                        rt.block_on(self.try_connection(host, port, &user, &pass))
+                        rt.block_on(self.try_connection(&host, port, &user, &pass))
                             .map_err(|e| format!("{e}"))
                     })
             },
@@ -191,25 +186,26 @@ impl FtpTroubleshooter {
 
     async fn try_connection(
         &self,
-        host: Ipv4Addr,
+        host: &Host,
         port: u16,
         user: &str,
         password: &str,
     ) -> eyre::Result<CheckResult> {
         use ::ftp::FtpStream;
+        use sha2::{Digest, Sha256};
         use tokio::time::{self, Duration};
-        use sha2::{Sha256, Digest};
 
         let user = user.to_string();
         let password = password.to_string();
         let compare_hash_file = self.compare_hash.clone();
         let write_test_enabled = self.write_test;
         let timeout_seconds = self.timeout;
+        let host = host.clone();
 
         let operation = time::timeout(
             Duration::from_secs(timeout_seconds),
             tokio::task::spawn_blocking(move || {
-                let mut ftp = FtpStream::connect((host, port))?;
+                let mut ftp = FtpStream::connect((host.to_string(), port))?;
 
                 let login_result = ftp.login(&user, &password);
 
@@ -368,7 +364,7 @@ impl FtpTroubleshooter {
                     "error": format!("{e:}"),
                     "timeout_seconds": timeout_seconds
                 });
-                
+
                 Ok(CheckResult::fail("", json))
             }
 

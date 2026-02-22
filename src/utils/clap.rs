@@ -1,3 +1,4 @@
+use std::fmt;
 use std::net::IpAddr;
 use std::str::FromStr;
 
@@ -21,6 +22,25 @@ impl From<String> for Host {
         match IpAddr::from_str(&v) {
             Ok(ip) => Host::Ip(ip),
             _ => Host::Domain(v),
+        }
+    }
+}
+
+#[derive(Debug, PartialEq, Eq)]
+pub struct ParseHostError;
+
+impl std::fmt::Display for ParseHostError {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "Error: Unable to parse host!")
+    }
+}
+
+impl FromStr for Host {
+    type Err = ParseHostError;
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match IpAddr::from_str(s) {
+            Ok(ip) => Ok(Host::Ip(ip)),
+            _ => Ok(Host::Domain(s.to_string())),
         }
     }
 }

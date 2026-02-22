@@ -1,6 +1,7 @@
+use crate::utils::clap::Host;
 #[cfg(unix)]
 use std::io::PipeWriter;
-use std::{net::Ipv4Addr, sync::Arc};
+use std::sync::Arc;
 
 use crossterm::event::{KeyCode, KeyEvent, KeyEventKind, KeyModifiers};
 use ratatui::{
@@ -35,9 +36,9 @@ impl Default for AddCheckSelectState {
 type ETIS<T> = ErrorTextInputState<T, Box<dyn for<'a> Fn(&'a str) -> Result<T, String>>>;
 
 enum AddCheckWizardState {
-    DnsStage1(usize, ETIS<Ipv4Addr>, TextInputState),
-    SshStage1(usize, ETIS<Ipv4Addr>, TextInputState),
-    HttpStage1(usize, ETIS<Ipv4Addr>, ETIS<u16>, TextInputState, bool),
+    DnsStage1(usize, ETIS<Host>, TextInputState),
+    SshStage1(usize, ETIS<Host>, TextInputState),
+    HttpStage1(usize, ETIS<Host>, ETIS<u16>, TextInputState, bool),
     Generalize(
         usize,
         usize,
@@ -422,26 +423,26 @@ pub async fn handle_keypress<'scope, 'env: 'scope>(
         return true;
     }
 
-    let ip_parser = Box::new(|s: &str| s.parse::<Ipv4Addr>().map_err(|e| format!("{e}")));
+    let host_parser = Box::new(|s: &str| s.parse::<Host>().map_err(|e| format!("{e}")));
     let port_parser = Box::new(|s: &str| s.parse::<u16>().map_err(|e| format!("{e}")));
 
     if let KeyCode::Char(' ') | KeyCode::Enter = key.code {
         tui.add_check_tab.wizard_state = match crate::checks::CheckTypes::check_names().get(i) {
             Some(&"SSH") => Some(AddCheckWizardState::SshStage1(
                 0,
-                ErrorTextInputState::new(ip_parser.clone() as Box<_>)
+                ErrorTextInputState::new(host_parser.clone() as Box<_>)
                     .set_input("127.0.0.1".to_string()),
                 TextInputState::default().set_input("root".to_string()),
             )),
             Some(&"DNS") => Some(AddCheckWizardState::DnsStage1(
                 0,
-                ErrorTextInputState::new(ip_parser.clone() as Box<_>)
+                ErrorTextInputState::new(host_parser.clone() as Box<_>)
                     .set_input("127.0.0.1".to_string()),
                 TextInputState::default().set_input("google.com".to_string()),
             )),
             Some(&"HTTP") => Some(AddCheckWizardState::HttpStage1(
                 0,
-                ErrorTextInputState::new(ip_parser.clone() as Box<_>)
+                ErrorTextInputState::new(host_parser.clone() as Box<_>)
                     .set_input("127.0.0.1".to_string()),
                 ErrorTextInputState::new(port_parser.clone() as Box<_>).set_input("80".to_string()),
                 TextInputState::default().set_input("/".to_string()),
@@ -726,7 +727,7 @@ fn handle_wizard<'scope, 'env: 'scope>(
 
                     let Ok(serde_json::Value::Object(mut check_type)) =
                         serde_json::to_value(&crate::checks::http::HttpTroubleshooter {
-                            host,
+                            host: host.clone(),
                             port,
                             uri: uri.input().to_owned(),
                             ..Default::default()

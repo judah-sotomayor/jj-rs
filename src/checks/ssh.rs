@@ -1,3 +1,4 @@
+use crate::utils::clap::Host;
 use std::{net::Ipv4Addr, sync::Arc};
 
 use chrono::Utc;
@@ -10,7 +11,7 @@ use super::*;
 pub struct SshTroubleshooter {
     /// The host to connect to and attempt signing in
     #[arg(long, short = 'H', default_value = "127.0.0.1")]
-    pub host: Ipv4Addr,
+    pub host: Host,
 
     /// The port of the SSH server
     #[arg(long, short, default_value_t = 22)]
@@ -47,7 +48,7 @@ pub struct SshTroubleshooter {
 impl Default for SshTroubleshooter {
     fn default() -> Self {
         SshTroubleshooter {
-            host: Ipv4Addr::from(0x7F_00_00_01),
+            host: Host::from("127.0.0.1".to_string()),
             port: 22,
             user: "root".to_string(),
             password: CheckValue::stdin(),
@@ -81,12 +82,12 @@ impl Troubleshooter for SshTroubleshooter {
                 CheckIpProtocol::Tcp,
                 self.host.is_loopback() || self.local,
             ),
-            tcp_connect_check(
-                self.host,
+            tcp_connect_check_dns(
+                self.host.clone(),
                 self.port,
                 self.disable_download_shell,
                 self.sneaky_ip,
-            ),
+            )?,
             #[cfg(unix)]
             immediate_tcpdump_check(
                 self.port,
@@ -115,7 +116,7 @@ impl Troubleshooter for SshTroubleshooter {
 
 impl SshTroubleshooter {
     fn try_remote_login(&self, tr: &mut dyn TroubleshooterRunner) -> eyre::Result<CheckResult> {
-        let host = self.host;
+        let host = self.host.clone();
         let port = self.port;
         let user = self.user.clone();
         let pass = self
@@ -133,7 +134,7 @@ impl SshTroubleshooter {
                     .build()
                     .map_err(|e| format!("{e}"))
                     .and_then(|rt| {
-                        rt.block_on(self.try_connection(host, port, &user, &pass))
+                        rt.block_on(self.try_connection(&host, port, &user, &pass))
                             .map_err(|e| format!("{e}"))
                     })
             },
@@ -152,7 +153,7 @@ impl SshTroubleshooter {
 
     async fn try_connection(
         &self,
-        host: Ipv4Addr,
+        host: &Host,
         port: u16,
         user: &str,
         password: &str,
@@ -180,7 +181,7 @@ impl SshTroubleshooter {
         let client_config = Arc::new(client_config);
         let mut session = match time::timeout(
             time::Duration::from_secs(5),
-            russh::client::connect(client_config, (host, port), Client),
+            russh::client::connect(client_config, (host.to_string(), port), Client),
         )
         .await
         {

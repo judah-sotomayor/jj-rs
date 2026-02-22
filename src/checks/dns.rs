@@ -1,3 +1,4 @@
+use crate::utils::clap::Host;
 use std::net::Ipv4Addr;
 
 use chrono::Utc;
@@ -14,7 +15,7 @@ pub struct Dns {
 
     /// The DNS server to query
     #[arg(long, short = 'H', default_value = "127.0.0.1")]
-    pub host: Ipv4Addr,
+    pub host: Host,
 
     /// The port of the DNS server
     #[arg(long, short, default_value_t = 53)]
@@ -48,7 +49,7 @@ impl Default for Dns {
     fn default() -> Self {
         Dns {
             domain: "google.com".to_string(),
-            host: Ipv4Addr::from(0x7F_00_00_01),
+            host: Host::from("127.0.0.1".to_string()),
             port: 53,
             qtype: "A".to_string(),
             local: false,
@@ -113,7 +114,7 @@ impl Troubleshooter for Dns {
 
 impl Dns {
     fn try_dns_query(&self, _tr: &mut dyn TroubleshooterRunner) -> CheckResult {
-        let host = self.host;
+        let host = self.host.clone();
         let port = self.port;
         let domain = &self.domain;
         let qtype = &self.qtype;
